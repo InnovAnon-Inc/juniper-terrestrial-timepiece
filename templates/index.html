@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Multi-Temporal Astronomical Clock</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: background-color 1s ease, color 1s ease;
+        }
+        .am-mode { background-color: #f1f5f9; color: #0f172a; }
+        .pm-mode { background-color: #0b0f19; color: #f8fafc; }
+        #canvas-container { position: relative; margin-top: 5px; }
+        canvas { display: block; }
+        .legend {
+            margin-top: 15px;
+            display: flex;
+            gap: 15px;
+            font-weight: 600;
+            font-size: 0.85em;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+        #info { margin-top: 8px; font-size: 0.8em; opacity: 0.85; }
+    </style>
+</head>
+<body class="am-mode">
+
+    <h2>Astronomical & Seasonal Clock</h2>
+    <div id="canvas-container">
+        <canvas id="clockCanvas" width="850" height="850"></canvas>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><span class="dot" style="background:#ef4444;"></span> Standard</div>
+        <div class="legend-item"><span class="dot" style="background:#10b981;"></span> Classical (Roman)</div>
+        <div class="legend-item"><span class="dot" style="background:#f59e0b;"></span> Solar</div>
+        <div class="legend-item"><span class="dot" style="background:#06b6d4;"></span> Tidal</div>
+        <div class="legend-item"><span class="dot" style="background:#8b5cf6;"></span> Season (Wheel)</div>
+        <div class="legend-item"><span class="dot" style="background:#ec4899;"></span> Moon Phase</div>
+    </div>
+
+    <div id="info">Loading astronomical parameters...</div>
+
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('clockCanvas');
+        const ctx = canvas.getContext('2d');
+        const radius = canvas.width / 2;
+        ctx.translate(radius, radius);
+
+        socket.on('clock_update', function(data) {
+            document.body.className = data.is_pm ? "pm-mode" : "am-mode";
+            document.getElementById('info').innerText = 
+                `Location: ${data.location.city} (${data.location.latitude.toFixed(2)}°, ${data.location.longitude.toFixed(2)}°) | Mode: ${data.is_pm ? 'PM (Night Dark)' : 'AM (Day Light)'}`;
+
+            drawClock(data);
+        });
+
+        function drawClock(data) {
+            ctx.clearRect(-radius, -radius, canvas.width, canvas.height);
+
+            // Dial Background
+            ctx.beginPath();
+            ctx.arc(0, 0, radius - 15, 0, 2 * Math.PI);
+            ctx.fillStyle = data.is_pm ? '#1e293b' : '#ffffff';
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = data.is_pm ? '#334155' : '#cbd5e1';
+            ctx.stroke();
+
+            // 1. Draw Vertically Stacked Landmarks Grouped by Position
+            drawPositionGroupedLandmarks();
+
+            // 2. Clock Numerals (1-12)
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = data.is_pm ? '#cbd5e1' : '#475569';
+            for (let num = 1; num <= 12; num++) {
+                let ang = num * Math.PI / 6;
+                ctx.rotate(ang);
+                ctx.translate(0, -radius + 175);
+                ctx.rotate(-ang);
+                ctx.fillText(num.toString(), 0, 0);
+                ctx.rotate(ang);
+                ctx.translate(0, radius - 175);
+                ctx.rotate(-ang);
+            }
+
+            // 3. Hands
+            let seasonAngle = (data.season_progress * 2 * Math.PI) - (Math.PI / 2);
+            drawLineHand(seasonAngle, radius * 0.22, '#8b5cf6', 5);
+
+            let moonAngle = (data.moon_progress * 2 * Math.PI) - (Math.PI / 2);
+            drawLineHand(moonAngle, radius * 0.32, '#ec4899', 4);
+
+            drawHandSet(data.standard, '#ef4444', 0.50, 0.65, 0.78, 4, 2, 1);
+            drawHandSet(data.roman, '#10b981', 0.46, 0.61, 0.74, 4, 2, 1);
+            drawHandSet(data.solar, '#f59e0b', 0.42, 0.57, 0.70, 4, 2, 1);
+            drawHandSet(data.tidal, '#06b6d4', 0.38, 0.53, 0.66, 4, 2, 1);
+
+            // Center Pin
+            ctx.beginPath();
+            ctx.arc(0, 0, 6, 0, 2 * Math.PI);
+            ctx.fillStyle = data.is_pm ? '#f8fafc' : '#0f172a';
+            ctx.fill();
+        }
+
+        function drawPositionGroupedLandmarks() {
+            const groupedPoints = [
+                {
+                    angle: -Math.PI / 2, // 12 o'clock / Top
+                    items: [
+                        { text: 'Ostara (Spring Eq.)', color: '#8b5cf6' },
+                        { text: 'Vernal Eq. (0°)', color: '#f59e0b' },
+                        { text: '🌊 High Tide', color: '#06b6d4' },
+                        { text: '🌑 New Moon', color: '#ec4899' }
+                    ]
+                },
+                {
+                    angle: -Math.PI / 4, // 1:30 position
+                    items: [{ text: 'Beltane', color: '#8b5cf6' }]
+                },
+                {
+                    angle: 0, // 3 o'clock / Right
+                    items: [
+                        { text: 'Litha (Summer Sol.)', color: '#8b5cf6' },
+                        { text: 'Summer Sol. (90°)', color: '#f59e0b' },
+                        { text: '📉 Low Tide', color: '#06b6d4' },
+                        { text: '🌓 1st Qtr Moon', color: '#ec4899' }
+                    ]
+                },
+                {
+                    angle: -Math.PI / 2 + 1.83, // Aphelion (~July 4)
+                    items: [{ text: 'Aphelion (~Jul 4)', color: '#f59e0b' }]
+                },
+                {
+                    angle: Math.PI / 4, // 4:30 position
+                    items: [{ text: 'Lughnasadh', color: '#8b5cf6' }]
+                },
+                {
+                    angle: Math.PI / 2, // 6 o'clock / Bottom
+                    items: [
+                        { text: 'Mabon (Autumn Eq.)', color: '#8b5cf6' },
+                        { text: 'Autumnal Eq. (180°)', color: '#f59e0b' },
+                        { text: '🌊 High Tide', color: '#06b6d4' },
+                        { text: '🌕 Full Moon', color: '#ec4899' }
+                    ]
+                },
+                {
+                    angle: 3 * Math.PI / 4, // 7:30 position
+                    items: [{ text: 'Samhain', color: '#8b5cf6' }]
+                },
+                {
+                    angle: Math.PI, // 9 o'clock / Left
+                    items: [
+                        { text: 'Yule (Winter Sol.)', color: '#8b5cf6' },
+                        { text: 'Winter Sol. (270°)', color: '#f59e0b' },
+                        { text: '📉 Low Tide', color: '#06b6d4' },
+                        { text: '🌗 3rd Qtr Moon', color: '#ec4899' }
+                    ]
+                },
+                {
+                    angle: Math.PI / 2 + 1.88, // Perihelion (~Jan 3)
+                    items: [{ text: 'Perihelion (~Jan 3)', color: '#f59e0b' }]
+                },
+                {
+                    angle: -3 * Math.PI / 4, // 10:30 position
+                    items: [{ text: 'Imbolc', color: '#8b5cf6' }]
+                }
+            ];
+
+            const anchorR = radius - 35; 
+            const lineSpacing = 14; // Fixed Y-pixels between lines in a group
+
+            groupedPoints.forEach(pt => {
+                const cos = Math.cos(pt.angle);
+                const sin = Math.sin(pt.angle);
+
+                // Base anchor coordinates on clock face
+                const anchorX = anchorR * cos;
+                const anchorY = anchorR * sin;
+
+                // Horizontal Alignment
+                let align = 'center';
+                if (cos > 0.3) align = 'left';
+                else if (cos < -0.3) align = 'right';
+
+                // Calculate vertical block offset to keep group centered vertically at its anchor point
+                const totalHeight = (pt.items.length - 1) * lineSpacing;
+                const startY = anchorY - (totalHeight / 2);
+
+                pt.items.forEach((item, idx) => {
+                    ctx.font = '11px sans-serif';
+                    ctx.fillStyle = item.color;
+                    ctx.textAlign = align;
+                    ctx.textBaseline = 'middle';
+
+                    // Explicit vertical offset per line
+                    let currentY = startY + (idx * lineSpacing);
+                    
+                    // Push 3 o'clock and 9 o'clock horizontal positions slightly inward/outward to prevent edge clipping
+                    let currentX = anchorX;
+                    if (cos > 0.3) currentX -= 80;
+                    if (cos < -0.3) currentX += 80;
+
+                    ctx.fillText(item.text, currentX, currentY);
+                });
+            });
+        }
+
+        function drawHandSet(timeObj, color, hRatio, mRatio, sRatio, hWidth, mWidth, sWidth) {
+            let hAngle = ((timeObj.h % 12) + timeObj.m / 60) * (Math.PI / 6) - (Math.PI / 2);
+            drawLineHand(hAngle, radius * hRatio, color, hWidth);
+
+            let mAngle = (timeObj.m + timeObj.s / 60) * (Math.PI / 30) - (Math.PI / 2);
+            drawLineHand(mAngle, radius * mRatio, color, mWidth);
+
+            let sAngle = timeObj.s * (Math.PI / 30) - (Math.PI / 2);
+            drawLineHand(sAngle, radius * sRatio, color, sWidth);
+        }
+
+        function drawLineHand(angle, length, color, width) {
+            ctx.beginPath();
+            ctx.lineWidth = width;
+            ctx.lineCap = "round";
+            ctx.strokeStyle = color;
+            ctx.moveTo(0, 0);
+            ctx.rotate(angle);
+            ctx.lineTo(length, 0);
+            ctx.stroke();
+            ctx.rotate(-angle);
+        }
+    </script>
+</body>
+</html>
