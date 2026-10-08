@@ -88,26 +88,26 @@
             ctx.fillStyle = data.is_pm ? '#cbd5e1' : '#475569';
             for (let num = 1; num <= 12; num++) {
                 let ang = num * Math.PI / 6;
+                ctx.save();
                 ctx.rotate(ang);
                 ctx.translate(0, -radius + 175);
                 ctx.rotate(-ang);
                 ctx.fillText(num.toString(), 0, 0);
-                ctx.rotate(ang);
-                ctx.translate(0, radius - 175);
-                ctx.rotate(-ang);
+                ctx.restore();
             }
 
-            // 3. Hands
+            // 3. Astronomical Ring Indicators
             let seasonAngle = (data.season_progress * 2 * Math.PI) - (Math.PI / 2);
             drawLineHand(seasonAngle, radius * 0.22, '#8b5cf6', 5);
 
             let moonAngle = (data.moon_progress * 2 * Math.PI) - (Math.PI / 2);
             drawLineHand(moonAngle, radius * 0.32, '#ec4899', 4);
 
-            drawHandSet(data.standard, '#ef4444', 0.50, 0.65, 0.78, 4, 2, 1);
-            drawHandSet(data.roman, '#10b981', 0.46, 0.61, 0.74, 4, 2, 1);
-            drawHandSet(data.solar, '#f59e0b', 0.42, 0.57, 0.70, 4, 2, 1);
-            drawHandSet(data.tidal, '#06b6d4', 0.38, 0.53, 0.66, 4, 2, 1);
+            // 4. Time Hand Sets (Hour, Minute, Second)
+            drawHandSet(data.standard, '#ef4444', 0.50, 0.65, 0.78, 4, 2, 1.5);
+            drawHandSet(data.roman, '#10b981', 0.46, 0.61, 0.74, 4, 2, 1.5);
+            drawHandSet(data.solar, '#f59e0b', 0.42, 0.57, 0.70, 4, 2, 1.5);
+            drawHandSet(data.tidal, '#06b6d4', 0.38, 0.53, 0.66, 4, 2, 1.5);
 
             // Center Pin
             ctx.beginPath();
@@ -181,22 +181,19 @@
             ];
 
             const anchorR = radius - 35; 
-            const lineSpacing = 14; // Fixed Y-pixels between lines in a group
+            const lineSpacing = 14;
 
             groupedPoints.forEach(pt => {
                 const cos = Math.cos(pt.angle);
                 const sin = Math.sin(pt.angle);
 
-                // Base anchor coordinates on clock face
                 const anchorX = anchorR * cos;
                 const anchorY = anchorR * sin;
 
-                // Horizontal Alignment
                 let align = 'center';
                 if (cos > 0.3) align = 'left';
                 else if (cos < -0.3) align = 'right';
 
-                // Calculate vertical block offset to keep group centered vertically at its anchor point
                 const totalHeight = (pt.items.length - 1) * lineSpacing;
                 const startY = anchorY - (totalHeight / 2);
 
@@ -206,10 +203,7 @@
                     ctx.textAlign = align;
                     ctx.textBaseline = 'middle';
 
-                    // Explicit vertical offset per line
                     let currentY = startY + (idx * lineSpacing);
-                    
-                    // Push 3 o'clock and 9 o'clock horizontal positions slightly inward/outward to prevent edge clipping
                     let currentX = anchorX;
                     if (cos > 0.3) currentX -= 80;
                     if (cos < -0.3) currentX += 80;
@@ -231,15 +225,16 @@
         }
 
         function drawLineHand(angle, length, color, width) {
+            ctx.save();
             ctx.beginPath();
             ctx.lineWidth = width;
             ctx.lineCap = "round";
             ctx.strokeStyle = color;
-            ctx.moveTo(0, 0);
             ctx.rotate(angle);
+            ctx.moveTo(0, 0);
             ctx.lineTo(length, 0);
             ctx.stroke();
-            ctx.rotate(-angle);
+            ctx.restore();
         }
     </script>
 </body>
